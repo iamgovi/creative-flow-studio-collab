@@ -1,0 +1,249 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-status-progress: var(--status-progress);
+  --color-status-review: var(--status-review);
+  --color-status-done: var(--status-done);
+  --color-status-overdue: var(--status-overdue);
+  --color-status-idle: var(--status-idle);
+
+  --color-priority-low: var(--priority-low);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-high: var(--priority-high);
+  --color-priority-critical: var(--priority-critical);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+}
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.17 0.01 270);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.17 0.01 270);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.17 0.01 270);
+  --primary: oklch(0.51 0.22 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.005 270);
+  --secondary-foreground: oklch(0.2 0.01 270);
+  --muted: oklch(0.965 0.005 270);
+  --muted-foreground: oklch(0.5 0.015 270);
+  --accent: oklch(0.96 0.01 277);
+  --accent-foreground: oklch(0.2 0.01 270);
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.92 0.005 270);
+  --input: oklch(0.92 0.005 270);
+  --ring: oklch(0.51 0.22 277);
+  --workflow-edge: oklch(0 0 0);
+
+  --status-progress: oklch(0.78 0.16 75);
+  --status-review: oklch(0.65 0.16 240);
+  --status-done: oklch(0.65 0.17 145);
+  --status-overdue: oklch(0.6 0.22 25);
+  --status-idle: oklch(0.65 0.02 270);
+
+  --priority-low: oklch(0.65 0.02 270);
+  --priority-medium: oklch(0.65 0.16 240);
+  --priority-high: oklch(0.78 0.16 75);
+  --priority-critical: oklch(0.6 0.22 25);
+
+  --chart-1: oklch(0.51 0.22 277);
+  --chart-2: oklch(0.65 0.17 145);
+  --chart-3: oklch(0.78 0.16 75);
+  --chart-4: oklch(0.65 0.16 240);
+  --chart-5: oklch(0.6 0.22 25);
+
+  --sidebar: oklch(0.99 0 0);
+  --sidebar-foreground: oklch(0.17 0.01 270);
+  --sidebar-primary: oklch(0.51 0.22 277);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.005 270);
+  --sidebar-accent-foreground: oklch(0.2 0.01 270);
+  --sidebar-border: oklch(0.92 0.005 270);
+  --sidebar-ring: oklch(0.51 0.22 277);
+}
+
+.dark {
+  --background: oklch(0.14 0.005 270);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.18 0.008 270);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.18 0.008 270);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.62 0.21 277);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.22 0.01 270);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.22 0.01 270);
+  --muted-foreground: oklch(0.65 0.015 270);
+  --accent: oklch(0.25 0.03 277);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.62 0.21 277);
+  --workflow-edge: oklch(0.99 0 0);
+
+  --status-progress: oklch(0.78 0.16 75);
+  --status-review: oklch(0.7 0.16 240);
+  --status-done: oklch(0.7 0.17 145);
+  --status-overdue: oklch(0.7 0.22 25);
+  --status-idle: oklch(0.6 0.02 270);
+
+  --sidebar: oklch(0.16 0.008 270);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.62 0.21 277);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.22 0.01 270);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.62 0.21 277);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  .font-mono, .tabular { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.animate-shake { animation: shake 0.45s ease-in-out; }
+
+@keyframes logo-in {
+  0% { opacity: 0; transform: scale(0.6) translateY(-12px); filter: blur(8px); }
+  60% { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+@keyframes logo-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 0%, transparent); }
+  50% { box-shadow: 0 0 40px 6px color-mix(in oklab, var(--primary) 25%, transparent); }
+}
+@keyframes card-rise {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-logo-in { animation: logo-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-logo-glow { animation: logo-glow 2.8s ease-in-out 0.9s infinite; }
+.animate-card-rise { animation: card-rise 0.6s ease-out both; }
+
+@keyframes logo-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.95; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+.animate-logo-breathe { animation: logo-breathe 3.2s ease-in-out infinite; transform-origin: center; }
+
+/* Transfer tile fun animations */
+@keyframes bar-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.animate-bar-shimmer {
+  background-size: 200% 100% !important;
+  animation: bar-shimmer 1.6s linear infinite;
+}
+@keyframes file-pop-in {
+  0% { opacity: 0; transform: translateX(-8px) scale(0.97); }
+  60% { opacity: 1; transform: translateX(2px) scale(1.01); }
+  100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+.animate-file-pop { animation: file-pop-in 0.5s cubic-bezier(.22,1,.36,1) both; }
+@keyframes ring-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 transparent); }
+  50%      { filter: drop-shadow(0 0 8px color-mix(in oklab, var(--accent-color, #f59e0b) 60%, transparent)); }
+}
+.animate-ring-pulse { animation: ring-pulse 2.4s ease-in-out infinite; }
+@keyframes check-pop {
+  0%   { opacity: 0; transform: scale(0.4) rotate(-20deg); }
+  60%  { opacity: 1; transform: scale(1.25) rotate(8deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+.animate-check-pop { animation: check-pop 0.45s cubic-bezier(.22,1,.36,1) both; }
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.animate-float-y { animation: float-y 2.4s ease-in-out infinite; }
+
+/* React Flow workflow connectors */
+.react-flow__edge-path,
+.react-flow__connection-path {
+  stroke: var(--workflow-edge) !important;
+  stroke-width: 3 !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: 8 6;
+  animation-duration: 0.8s;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--workflow-edge) !important;
+  stroke-width: 4 !important;
+}
+
+.react-flow__handle {
+  z-index: 20;
+  pointer-events: all;
+}
