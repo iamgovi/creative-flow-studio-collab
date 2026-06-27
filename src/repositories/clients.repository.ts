@@ -15,13 +15,29 @@ export type ClientWorkflowInsert = Database["public"]["Tables"]["client_workflow
 export type ProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
 export type UserRow = Database["public"]["Tables"]["users"]["Row"];
 
+function supabaseError(error: unknown, operation: string): Error {
+  if (error instanceof Error) return error;
+
+  const record = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+  const message =
+    typeof record?.message === "string" && record.message.trim()
+      ? record.message
+      : "Supabase request failed.";
+  const details =
+    typeof record?.details === "string" && record.details.trim() ? ` Details: ${record.details}` : "";
+  const hint = typeof record?.hint === "string" && record.hint.trim() ? ` Hint: ${record.hint}` : "";
+  const code = typeof record?.code === "string" && record.code.trim() ? ` (${record.code})` : "";
+
+  return new Error(`${operation} failed${code}: ${message}${details}${hint}`);
+}
+
 export async function fetchClients(): Promise<Client[]> {
   const { data, error } = await getSupabaseClient()
     .from("clients")
     .select(CLIENT_COLUMNS)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Fetch clients");
 
   return data ?? [];
 }
@@ -33,7 +49,7 @@ export async function fetchClientById(id: string): Promise<Client | null> {
     .eq("id", id)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Fetch client");
 
   return data;
 }
@@ -44,7 +60,7 @@ export async function fetchClientProjects(): Promise<ClientProjectRow[]> {
     .select(PROJECT_COLUMNS)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Fetch client projects");
 
   return data ?? [];
 }
@@ -56,7 +72,7 @@ async function resolveClientCreatedById(authUserId: string): Promise<string | nu
     .eq("id", authUserId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Resolve client creator");
 
   return data?.id ?? null;
 }
@@ -68,19 +84,18 @@ export async function createClient(input: Omit<ClientInsert, "created_by">): Pro
     error: userError,
   } = await supabase.auth.getUser();
 
-  if (userError) throw userError;
+  if (userError) throw supabaseError(userError, "Read signed-in user");
   if (!user) throw new Error("You must be signed in to create a client.");
 
   const createdBy = await resolveClientCreatedById(user.id);
   const payload = { ...input, created_by: createdBy };
-  console.log("CLIENT INSERT PAYLOAD", payload);
   const { data, error } = await supabase
     .from("clients")
     .insert(payload)
     .select(CLIENT_COLUMNS)
     .single();
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Create client");
 
   return data;
 }
@@ -95,7 +110,7 @@ export async function createClientWorkflows(
     .insert(rows)
     .select("id,client_id,workflow_type,created_at");
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Create client workflows");
 
   return data ?? [];
 }
@@ -107,7 +122,7 @@ export async function createProject(input: ProjectInsert): Promise<ClientProject
     .select(PROJECT_COLUMNS)
     .single();
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Create initial project");
 
   return data;
 }
@@ -118,19 +133,19 @@ export async function deleteClientWorkflows(clientId: string): Promise<void> {
     .delete()
     .eq("client_id", clientId);
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Delete client workflows");
 }
 
 export async function deleteClientProjects(clientId: string): Promise<void> {
   const { error } = await getSupabaseClient().from("projects").delete().eq("client_id", clientId);
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Delete client projects");
 }
 
 export async function deleteClient(id: string): Promise<void> {
   const { error } = await getSupabaseClient().from("clients").delete().eq("id", id);
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Delete client");
 }
 
 export const clientsRepository = {

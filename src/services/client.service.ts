@@ -280,6 +280,10 @@ async function rollbackCreatedClient(clientId: string) {
   }
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export const clientsService = {
   getClients: fetchClients,
   getClientById: fetchClientById,
@@ -287,21 +291,24 @@ export const clientsService = {
     const client = await createClient(mapCreateClientInput(input));
 
     try {
-      await createClientWorkflows(
-        DEFAULT_CLIENT_WORKFLOW_TYPES.map((workflowType) => ({
-          client_id: client.id,
-          workflow_type: workflowType,
-        })),
-      );
+      try {
+        await createClientWorkflows(
+          DEFAULT_CLIENT_WORKFLOW_TYPES.map((workflowType) => ({
+            client_id: client.id,
+            workflow_type: workflowType,
+          })),
+        );
+      } catch (workflowError) {
+        console.warn(errorMessage(workflowError, "Create client workflows failed."));
+      }
 
       await createProject(mapCreateProjectInput(input, client.id));
     } catch (error) {
       try {
         await rollbackCreatedClient(client.id);
       } catch (rollbackError) {
-        const rollbackMessage =
-          rollbackError instanceof Error ? rollbackError.message : "rollback failed";
-        const originalMessage = error instanceof Error ? error.message : "client setup failed";
+        const rollbackMessage = errorMessage(rollbackError, "rollback failed");
+        const originalMessage = errorMessage(error, "client setup failed");
         throw new Error(`${originalMessage} The client was created, but rollback failed: ${rollbackMessage}`);
       }
 

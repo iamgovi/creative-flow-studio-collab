@@ -112,6 +112,13 @@ export function ClientNewView() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
+  function messageFromError(error: unknown) {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    if (typeof error === "string" && error.trim()) return error;
+
+    return "An unexpected error occurred.";
+  }
+
   async function handleSubmit() {
     if (!form.name.trim()) {
       toast.error("Client name is required.");
@@ -144,7 +151,7 @@ export function ClientNewView() {
     }
 
     try {
-      await createClientMutation.mutateAsync({
+      const client = await createClientMutation.mutateAsync({
         ...form,
         deadline,
         selectedManagerId: selectedManager,
@@ -152,12 +159,25 @@ export function ClientNewView() {
         projectType,
         projectDeadline,
       });
-      await queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
+
+      try {
+        await queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
+      } catch (error) {
+        console.warn("Client created, but cache refresh failed.", error);
+      }
+
       toast.success(`${form.name.trim()} added`);
-      navigate({ to: clientsTo });
+      try {
+        await navigate({ to: clientsTo });
+      } catch (error) {
+        toast.error("Client created, but redirect failed", {
+          description: messageFromError(error),
+        });
+        console.error("Client redirect failed after creation.", { clientId: client.id, error });
+      }
     } catch (error) {
       toast.error("Unable to create client", {
-        description: error instanceof Error ? error.message : "Please check the form and try again.",
+        description: messageFromError(error),
       });
     }
   }
