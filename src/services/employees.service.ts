@@ -1,5 +1,6 @@
 import {
   deleteRole,
+  fetchManagerProfiles,
   fetchPermissions,
   fetchProfiles,
   fetchRoles,
@@ -36,10 +37,26 @@ export interface EmployeesModuleData {
   roles: RoleRecord[];
 }
 
+export interface ClientAssignmentPerson {
+  id: string;
+  name: string;
+  email: string;
+  role: "manager" | "employee";
+  department: string;
+  position: string;
+  avatar: string;
+}
+
+export interface ClientAssignmentPeople {
+  team: ClientAssignmentPerson[];
+  managers: ClientAssignmentPerson[];
+}
+
 const MODULE_KEYS = new Set(MODULES.map((module) => module.key));
 const ACTION_KEYS = new Set(ACTIONS);
 const JOB_ROLE_SET = new Set<string>(JOB_ROLES);
 const NOT_ASSIGNED_JOB_ROLE = "Not Assigned";
+const CLIENT_MANAGER_JOB_ROLES = new Set(["Production Head", "Senior Graphic Designer"]);
 
 function titleCase(value: string) {
   return value
@@ -80,6 +97,34 @@ function profileToEmployee(profile: ProfileRow): RoleEmployee {
     department: jobRole,
     avatar: profile.avatar_url ?? "",
   };
+}
+
+function profileToClientAssignmentPerson(profile: ProfileRow): ClientAssignmentPerson | null {
+  if (profile.role !== "manager" && profile.role !== "employee") return null;
+
+  const name = profile.full_name?.trim() || profile.email;
+  const jobRole = profile.job_role?.trim() || NOT_ASSIGNED_JOB_ROLE;
+
+  return {
+    id: profile.id,
+    name,
+    email: profile.email,
+    role: profile.role,
+    department: jobRole,
+    position: jobRole,
+    avatar: profile.avatar_url ?? "",
+  };
+}
+
+function buildClientAssignmentPeople(profiles: ProfileRow[]): ClientAssignmentPeople {
+  const team = profiles
+    .map(profileToClientAssignmentPerson)
+    .filter((person): person is ClientAssignmentPerson => Boolean(person));
+  const managers = team.filter(
+    (person) => person.role === "manager" && CLIENT_MANAGER_JOB_ROLES.has(person.position),
+  );
+
+  return { team, managers };
 }
 
 function permissionsToMap(rows: PermissionRow[]): PermissionMap {
@@ -176,6 +221,12 @@ export const employeesService = {
     ]);
 
     return buildModuleData(profiles, roles, permissions, userRoles);
+  },
+
+  async getClientAssignmentPeople(): Promise<ClientAssignmentPeople> {
+    const profiles = await fetchManagerProfiles();
+
+    return buildClientAssignmentPeople(profiles);
   },
 
   async inviteMember(input: InviteMemberInput): Promise<void> {

@@ -12,11 +12,32 @@ export interface Database {
           notes: string | null;
           monthly_revenue: number | null;
           setup_fee: number | null;
+          contract_months: number | null;
+          is_contract: boolean | null;
+          static_count: number | null;
+          video_count: number | null;
+          deadline: string | null;
           created_by: string | null;
           created_at: string;
           updated_at: string | null;
         };
-        Insert: never;
+        Insert: {
+          id?: string;
+          name: string;
+          contact_email?: string | null;
+          industry?: string | null;
+          notes?: string | null;
+          monthly_revenue?: number | null;
+          setup_fee?: number | null;
+          contract_months?: number | null;
+          is_contract?: boolean | null;
+          static_count?: number | null;
+          video_count?: number | null;
+          deadline?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+        };
         Update: never;
         Relationships: [];
       };
@@ -34,6 +55,52 @@ export interface Database {
           updated_at: string | null;
           status: string | null;
           client_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          client: string;
+          type: string;
+          current_stage?: string | null;
+          progress?: number | null;
+          owner_id?: string | null;
+          deadline?: string | null;
+          created_at?: string;
+          updated_at?: string | null;
+          status?: string | null;
+          client_id?: string | null;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      client_workflows: {
+        Row: {
+          id: string;
+          client_id: string;
+          workflow_type: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          workflow_type: string;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      users: {
+        Row: {
+          id: string;
+          name: string | null;
+          email: string | null;
+          department: string | null;
+          position: string | null;
+          avatar_url: string | null;
+          status: string | null;
+          last_login: string | null;
+          created_at: string;
+          updated_at: string | null;
         };
         Insert: never;
         Update: never;

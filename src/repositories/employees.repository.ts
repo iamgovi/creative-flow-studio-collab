@@ -47,6 +47,18 @@ export async function fetchProfiles(): Promise<ProfileRow[]> {
   return data ?? [];
 }
 
+export async function fetchManagerProfiles(): Promise<ProfileRow[]> {
+  const { data, error } = await getSupabaseClient()
+    .from("profiles")
+    .select(PROFILE_COLUMNS)
+    .eq("role", "manager")
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+
+  return data ?? [];
+}
+
 export async function fetchRoles(): Promise<RoleRow[]> {
   const { data, error } = await getSupabaseClient()
     .from("roles")
