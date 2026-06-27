@@ -1,41 +1,82 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Users as UsersIcon, Briefcase, ShieldAlert, UserPlus, ArrowUpRight, FolderKanban } from "lucide-react";
-import { users, projects, auditEvents } from "@/data/mock";
+import { Users as UsersIcon, Briefcase, ShieldAlert, UserPlus, FolderKanban, Inbox } from "lucide-react";
+import { users, auditEvents } from "@/data/mock";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  useAdminDashboardClients,
+  useAdminDashboardKpis,
+  useAdminDashboardTeamMates,
+} from "@/hooks/useAdminDashboard";
 
 export const Route = createFileRoute("/admin/dashboard")({ component: AdminDashboard });
 
 function AdminDashboard() {
-  const employees = useMemo(() => users.filter((u) => u.role !== "admin"), []);
-  const activeEmployees = employees.filter((u) => u.status === "active");
-
-  // Aggregate clients from deliverables
-  const clients = useMemo(() => {
-    const map = new Map<string, { name: string; projects: number; activeProjects: number }>();
-    for (const p of projects) {
-      const c = map.get(p.client) ?? { name: p.client, projects: 0, activeProjects: 0 };
-      c.projects += 1;
-      if (p.progress < 100) c.activeProjects += 1;
-      map.set(p.client, c);
-    }
-    return Array.from(map.values()).sort((a, b) => b.projects - a.projects);
-  }, []);
+  const kpisQuery = useAdminDashboardKpis();
+  const teamMatesQuery = useAdminDashboardTeamMates();
+  const clientsQuery = useAdminDashboardClients();
+  const employees = teamMatesQuery.data ?? [];
+  const clients = clientsQuery.data ?? [];
 
   const security = auditEvents
     .filter((e) => ["USER_LOGIN", "ROLE_CHANGED"].includes(e.action))
     .slice(0, 5);
 
   const kpis = [
-    { label: "Employees", value: activeEmployees.length, sub: `${employees.length} total`, icon: UsersIcon },
-    { label: "Clients", value: clients.length, sub: `${projects.length} deliverables`, icon: Briefcase },
-    { label: "Active deliverables", value: projects.filter((p) => p.progress < 100).length, sub: "in flight", icon: FolderKanban },
-    { label: "Org productivity", value: "68%", sub: "+4% vs last wk", icon: ArrowUpRight },
+    {
+      label: "Employees",
+      value: kpisQuery.employees.data ?? "—",
+      sub: kpisQuery.employees.isLoading
+        ? "Loading..."
+        : kpisQuery.employees.isError
+          ? kpisQuery.employees.error.message
+          : "users.position = employee",
+      icon: UsersIcon,
+    },
+    {
+      label: "Managers",
+      value: kpisQuery.managers.data ?? "—",
+      sub: kpisQuery.managers.isLoading
+        ? "Loading..."
+        : kpisQuery.managers.isError
+          ? kpisQuery.managers.error.message
+          : "users.position = manager",
+      icon: UsersIcon,
+    },
+    {
+      label: "Clients",
+      value: kpisQuery.clients.data ?? "—",
+      sub: kpisQuery.clients.isLoading
+        ? "Loading..."
+        : kpisQuery.clients.isError
+          ? kpisQuery.clients.error.message
+          : "total clients",
+      icon: Briefcase,
+    },
+    {
+      label: "Active deliverables",
+      value: kpisQuery.activeDeliverables.data ?? "—",
+      sub: kpisQuery.activeDeliverables.isLoading
+        ? "Loading..."
+        : kpisQuery.activeDeliverables.isError
+          ? kpisQuery.activeDeliverables.error.message
+          : "projects.status = active",
+      icon: FolderKanban,
+    },
+    {
+      label: "Incoming Projects",
+      value: kpisQuery.incomingProjects.data ?? "—",
+      sub: kpisQuery.incomingProjects.isLoading
+        ? "Loading..."
+        : kpisQuery.incomingProjects.isError
+          ? kpisQuery.incomingProjects.error.message
+          : "awaiting setup",
+      icon: Inbox,
+    },
   ];
 
   return (
@@ -52,7 +93,7 @@ function AdminDashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
           {kpis.map((k) => (
             <Card key={k.label} className="p-4">
               <div className="flex items-center justify-between">
@@ -73,15 +114,15 @@ function AdminDashboard() {
               <Button asChild size="sm" variant="ghost"><Link to="/admin/employees">View all</Link></Button>
             </div>
             <ul className="divide-y">
-              {employees.slice(0, 7).map((u) => (
+              {employees.map((u) => (
                 <li key={u.id} className="py-2.5 flex items-center gap-3">
                   <Avatar className="size-8">
-                    <AvatarImage src={u.avatar} />
+                    <AvatarImage src={u.avatarUrl ?? undefined} />
                     <AvatarFallback>{u.name[0]}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{u.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">{u.position} · {u.department}</div>
+                    <div className="text-xs text-muted-foreground truncate">{u.department} · {u.position}</div>
                   </div>
                   <span className={cn(
                     "text-[11px] px-1.5 py-0.5 rounded-full border",
@@ -91,6 +132,21 @@ function AdminDashboard() {
                   </span>
                 </li>
               ))}
+              {teamMatesQuery.isLoading && (
+                <li className="py-8 text-center text-sm text-muted-foreground">
+                  Loading team mates...
+                </li>
+              )}
+              {teamMatesQuery.isError && (
+                <li className="py-8 text-center text-sm text-destructive">
+                  {teamMatesQuery.error.message}
+                </li>
+              )}
+              {!teamMatesQuery.isLoading && !teamMatesQuery.isError && employees.length === 0 && (
+                <li className="py-8 text-center text-sm text-muted-foreground">
+                  No team mates found.
+                </li>
+              )}
             </ul>
           </Card>
 
@@ -101,18 +157,35 @@ function AdminDashboard() {
               <Button asChild size="sm" variant="ghost"><Link to="/admin/clients">View all</Link></Button>
             </div>
             <ul className="divide-y">
-              {clients.slice(0, 7).map((c) => (
-                <li key={c.name} className="py-2.5 flex items-center gap-3">
+              {clients.map((c) => (
+                <li key={c.id} className="py-2.5 flex items-center gap-3">
                   <div className="size-8 rounded-md bg-muted grid place-items-center text-xs font-semibold">
                     {c.name.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium truncate">{c.name}</div>
-                    <div className="text-xs text-muted-foreground">{c.projects} deliverable{c.projects > 1 ? "s" : ""} · {c.activeProjects} active</div>
+                    <div className="text-xs text-muted-foreground">
+                      {c.activeProjects} active · {c.incomingProjects} incoming
+                    </div>
                   </div>
-                  <ArrowUpRight className="size-4 text-muted-foreground" />
+                  <FolderKanban className="size-4 text-muted-foreground" />
                 </li>
               ))}
+              {clientsQuery.isLoading && (
+                <li className="py-8 text-center text-sm text-muted-foreground">
+                  Loading clients...
+                </li>
+              )}
+              {clientsQuery.isError && (
+                <li className="py-8 text-center text-sm text-destructive">
+                  {clientsQuery.error.message}
+                </li>
+              )}
+              {!clientsQuery.isLoading && !clientsQuery.isError && clients.length === 0 && (
+                <li className="py-8 text-center text-sm text-muted-foreground">
+                  No clients found.
+                </li>
+              )}
             </ul>
           </Card>
         </div>
