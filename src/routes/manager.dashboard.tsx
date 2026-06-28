@@ -1,53 +1,56 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowUpRight, AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
-import { tasks, projects, users } from "@/data/mock";
-import { formatDistanceToNow } from "date-fns";
+import { ArrowUpRight, AlertTriangle, Clock, CheckCircle2, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IncomingProjectsStrip } from "@/components/setup/IncomingProjectsStrip";
-import { ReviewPanel } from "@/components/deliverables/ReviewPanel";
-import { clientById, memberById } from "@/data/mockDeliverablesRelay";
-import { useRelayStore } from "@/hooks/useRelayWorkflow";
+import { useManagerDashboard } from "@/hooks/useManagerDashboard";
 
 export const Route = createFileRoute("/manager/dashboard")({ component: ManagerDashboard });
 
-const employees = users.filter((u) => u.role === "employee");
-
 function ManagerDashboard() {
-  const overdue = tasks.filter((t) => new Date(t.deadline).getTime() < Date.now() && t.status !== "done");
-
-  const deliverables = useRelayStore((s) => s.deliverables);
-  const approve = useRelayStore((s) => s.approve);
-  const requestRevision = useRelayStore((s) => s.requestRevision);
-  const reviewQueue = deliverables.filter((d) => d.status === "awaiting_review");
-
-  const [reviewId, setReviewId] = useState<string | null>(null);
-  const reviewDeliverable = reviewId ? reviewQueue.find((d) => d.id === reviewId) ?? null : null;
-
-  const handleApprove = () => {
-    if (!reviewId) return;
-    approve(reviewId);
-    toast.success("Deliverable complete 🎉");
-    setReviewId(null);
+  const { data, isLoading, isError, error } = useManagerDashboard();
+  const counts = data?.counts ?? {
+    incomingProjects: 0,
+    activeDeliverables: 0,
+    pendingApprovals: 0,
+    teamProductivity: 0,
   };
-  const handleRevision = (notes: string, newAssigneeId?: string) => {
-    if (!reviewId) return;
-    const name = memberById(newAssigneeId ?? reviewDeliverable?.assigneeId)?.name ?? "the assignee";
-    requestRevision(reviewId, notes, newAssigneeId);
-    toast.info("Revision requested", { description: `Sent back to ${name}.` });
-    setReviewId(null);
-  };
+  const activeProjects = data?.activeProjects ?? [];
+  const pendingApprovals = data?.pendingApprovals ?? [];
+  const delayAlerts = data?.delayAlerts ?? [];
+  const workloadRows = data?.workloadRows ?? [];
 
   const kpis = [
-    { label: "Active Deliverables", value: projects.length, trend: "+2 this week", icon: ArrowUpRight, tone: "text-status-done" },
-    { label: "Pending Approvals", value: reviewQueue.length, trend: "3 over 24h", icon: Clock, tone: "text-status-review" },
-    { label: "Tasks Overdue", value: overdue.length, trend: "+1 vs yesterday", icon: AlertTriangle, tone: "text-status-overdue" },
-    { label: "Team Productivity", value: "73%", trend: "+4% vs last wk", icon: CheckCircle2, tone: "text-status-done" },
+    {
+      label: "Incoming Projects",
+      value: isLoading ? "—" : counts.incomingProjects,
+      trend: "awaiting setup",
+      icon: Inbox,
+      tone: "text-status-review",
+    },
+    {
+      label: "Active Deliverables",
+      value: isLoading ? "—" : counts.activeDeliverables,
+      trend: "projects.status = active",
+      icon: ArrowUpRight,
+      tone: "text-status-done",
+    },
+    {
+      label: "Pending Approvals",
+      value: counts.pendingApprovals,
+      trend: "no approvals backend yet",
+      icon: Clock,
+      tone: "text-status-review",
+    },
+    {
+      label: "Team Productivity",
+      value: `${counts.teamProductivity}%`,
+      trend: "not calculated yet",
+      icon: CheckCircle2,
+      tone: "text-status-done",
+    },
   ];
 
   return (
@@ -59,6 +62,12 @@ function ManagerDashboard() {
         </div>
 
         <IncomingProjectsStrip />
+
+        {isError && (
+          <Card className="p-3 text-sm text-destructive">
+            {error.message}
+          </Card>
+        )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {kpis.map((k) => (
@@ -80,30 +89,10 @@ function ManagerDashboard() {
               <div className="font-medium">Pending Approvals</div>
               <Button variant="ghost" size="sm">View all</Button>
             </div>
-            {reviewQueue.length === 0 ? (
+            {pendingApprovals.length === 0 ? (
               <div className="p-10 text-center text-sm text-muted-foreground">All caught up.</div>
             ) : (
-              <ul className="divide-y">
-                {reviewQueue.map((d) => {
-                  const u = memberById(d.assigneeId);
-                  const c = clientById(d.clientId);
-                  return (
-                    <li key={d.id} className="px-5 py-3 flex items-center gap-3">
-                      <div className="size-10 rounded bg-muted shrink-0" />
-                      <Avatar className="size-7">
-                        <AvatarImage src={u?.avatar} />
-                        <AvatarFallback>{u?.name?.[0] ?? "?"}</AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{d.name}</div>
-                        <div className="text-xs text-muted-foreground">{u?.name} · {c?.name} · due {formatDistanceToNow(new Date(d.deadline), { addSuffix: true })}</div>
-                      </div>
-                      <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-700">Awaiting Review</span>
-                      <Button size="sm" onClick={() => setReviewId(d.id)}>Review</Button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <ul className="divide-y" />
             )}
           </Card>
 
@@ -115,20 +104,11 @@ function ManagerDashboard() {
               </div>
             </div>
             <ul className="divide-y max-h-[360px] overflow-auto">
-              {overdue.slice(0, 8).map((t) => {
-                const u = users.find((x) => x.id === t.assigneeId)!;
-                const days = Math.floor((Date.now() - new Date(t.deadline).getTime()) / 86400_000);
-                return (
-                  <li key={t.id} className="px-5 py-3">
-                    <div className="text-sm font-medium truncate">{t.title}</div>
-                    <div className="text-xs text-muted-foreground">{u.name} · <span className="text-status-overdue">{days}d late</span></div>
-                    <div className="mt-2 flex gap-2">
-                      <Button size="sm" variant="outline">Reassign</Button>
-                      <Button size="sm" variant="ghost">Extend</Button>
-                    </div>
-                  </li>
-                );
-              })}
+              {delayAlerts.length === 0 && (
+                <li className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  No delay alerts.
+                </li>
+              )}
             </ul>
           </Card>
         </div>
@@ -136,18 +116,18 @@ function ManagerDashboard() {
         {/* Workload heatmap */}
         <Card className="p-5">
           <div className="font-medium mb-4">Team workload — this week</div>
-          <Heatmap />
+          <Heatmap rows={workloadRows} />
         </Card>
 
         {/* Deliverable pipeline */}
         <Card className="p-5">
           <div className="font-medium mb-4">Deliverable pipeline</div>
           <div className="space-y-3">
-            {projects.map((p) => (
+            {activeProjects.map((p) => (
               <div key={p.id} className="grid grid-cols-[200px_1fr_60px] items-center gap-4">
                 <div>
                   <div className="text-sm font-medium truncate">{p.name}</div>
-                  <div className="text-xs text-muted-foreground capitalize">{p.type} · {p.client}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{p.currentStage} · {p.client}</div>
                 </div>
                 <div className="h-2 rounded-full bg-muted overflow-hidden">
                   <div className="h-full bg-primary" style={{ width: `${p.progress}%` }} />
@@ -155,23 +135,34 @@ function ManagerDashboard() {
                 <div className="text-xs text-right tabular text-muted-foreground">{p.progress}%</div>
               </div>
             ))}
+            {isLoading && (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                Loading pipeline...
+              </div>
+            )}
+            {!isLoading && !isError && activeProjects.length === 0 && (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No active deliverables found.
+              </div>
+            )}
           </div>
         </Card>
       </div>
-
-      <ReviewPanel
-        deliverable={reviewDeliverable}
-        open={!!reviewId}
-        onOpenChange={(o) => !o && setReviewId(null)}
-        onApprove={handleApprove}
-        onRequestRevision={handleRevision}
-      />
     </AppShell>
   );
 }
 
-function Heatmap() {
+function Heatmap({ rows }: { rows: [] }) {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+  if (rows.length === 0) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        No workload data available.
+      </div>
+    );
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="text-sm">
@@ -183,30 +174,7 @@ function Heatmap() {
             ))}
           </tr>
         </thead>
-        <tbody>
-          {employees.slice(0, 8).map((u, i) => (
-            <tr key={u.id}>
-              <td className="pr-4 py-1.5">
-                <div className="flex items-center gap-2">
-                  <Avatar className="size-6"><AvatarImage src={u.avatar} /><AvatarFallback>{u.name[0]}</AvatarFallback></Avatar>
-                  <span className="text-sm truncate max-w-[140px]">{u.name}</span>
-                </div>
-              </td>
-              {days.map((d, j) => {
-                const v = ((i * 3 + j * 2) % 5) / 4;
-                return (
-                  <td key={d} className="px-1 py-1">
-                    <div
-                      className="h-7 w-12 rounded"
-                      style={{ background: `color-mix(in oklab, var(--color-primary) ${v * 80 + 8}%, var(--color-muted))` }}
-                      title={`${Math.round(v * 8)}h`}
-                    />
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
+        <tbody />
       </table>
     </div>
   );
