@@ -1,4 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import {
   ReactFlow,
@@ -29,6 +30,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   Building2,
   DollarSign,
@@ -51,19 +59,25 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { users } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCurrentRole } from "@/hooks/use-current-role";
+import { useCreateClient } from "@/hooks/useCreateClient";
+import { useClientAssignmentPeople } from "@/hooks/useClientAssignmentPeople";
+import type { CreateClientProjectType } from "@/services/client.service";
+import type { ClientAssignmentPerson } from "@/services/employees.service";
 
-const allTeam = users.filter((u) => u.role === "employee" || u.role === "manager");
 type TeamFilter = "all" | "managers" | "members";
-const managers = users.filter((u) => u.role === "manager");
 
 export function ClientNewView() {
   const role = useCurrentRole();
   const clientsTo = role === "admin" ? "/admin/clients" : "/manager/clients";
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const createClientMutation = useCreateClient();
+  const assignmentPeopleQuery = useClientAssignmentPeople();
+  const allTeam = assignmentPeopleQuery.data?.team ?? [];
+  const managers = assignmentPeopleQuery.data?.managers ?? [];
 
   const [form, setForm] = useState({
     name: "",
@@ -82,6 +96,9 @@ export function ClientNewView() {
   const [tone, setTone] = useState("");
   const [deliverables, setDeliverables] = useState<string[]>([]);
   const [deliverableInput, setDeliverableInput] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [projectType, setProjectType] = useState<CreateClientProjectType | "">("");
+  const [projectDeadline, setProjectDeadline] = useState<Date | undefined>(undefined);
   const [selectedManager, setSelectedManager] = useState("");
 
   const totals = useMemo(() => {
@@ -95,13 +112,74 @@ export function ClientNewView() {
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  function handleSubmit() {
+  function messageFromError(error: unknown) {
+    if (error instanceof Error && error.message.trim()) return error.message;
+    if (typeof error === "string" && error.trim()) return error;
+
+    return "An unexpected error occurred.";
+  }
+
+  async function handleSubmit() {
     if (!form.name.trim()) {
-      toast.error("Client name is required");
+      toast.error("Client name is required.");
       return;
     }
-    toast.success(`${form.name} added — workflow assigned`);
-    navigate({ to: clientsTo });
+
+    if (!projectName.trim()) {
+      toast.error("Project name is required.");
+      return;
+    }
+
+    if (!projectType) {
+      toast.error("Project type is required.");
+      return;
+    }
+
+    if (!projectDeadline) {
+      toast.error("Project deadline is required.");
+      return;
+    }
+
+    if (!selectedManager) {
+      toast.error("Select a project manager before creating a client.");
+      return;
+    }
+
+    if (!managers.some((manager) => manager.id === selectedManager)) {
+      toast.error("Select a valid project manager from the Supabase manager list.");
+      return;
+    }
+
+    try {
+      const client = await createClientMutation.mutateAsync({
+        ...form,
+        deadline,
+        selectedManagerId: selectedManager,
+        projectName,
+        projectType,
+        projectDeadline,
+      });
+
+      try {
+        await queryClient.invalidateQueries({ queryKey: ["admin", "clients"] });
+      } catch (error) {
+        console.warn("Client created, but cache refresh failed.", error);
+      }
+
+      toast.success(`${form.name.trim()} added`);
+      try {
+        await navigate({ to: clientsTo });
+      } catch (error) {
+        toast.error("Client created, but redirect failed", {
+          description: messageFromError(error),
+        });
+        console.error("Client redirect failed after creation.", { clientId: client.id, error });
+      }
+    } catch (error) {
+      toast.error("Unable to create client", {
+        description: messageFromError(error),
+      });
+    }
   }
 
   return (
@@ -126,9 +204,9 @@ export function ClientNewView() {
                 Cancel
               </Link>
             </Button>
-            <Button onClick={handleSubmit}>
+            <Button onClick={handleSubmit} disabled={createClientMutation.isPending}>
               <Check className="size-4" />
-              Create client
+              {createClientMutation.isPending ? "Creating..." : "Create client"}
             </Button>
           </div>
         </div>
@@ -426,6 +504,77 @@ export function ClientNewView() {
               />
             </div>
           </Card>
+          <Card className="p-6 space-y-4 col-span-full">
+            <h3 className="font-medium">Project Information</h3>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label>Project name</Label>
+                <Input
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="Initial campaign"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Project type</Label>
+                <Select
+                  value={projectType}
+                  onValueChange={(value) => setProjectType(value as CreateClientProjectType)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="video">Video</SelectItem>
+                    <SelectItem value="static">Static</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="flex items-center gap-1.5">
+                  <CalendarIcon className="size-3.5" />
+                  Project deadline
+                </Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !projectDeadline && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarIcon className="size-3.5" />
+                      {projectDeadline ? format(projectDeadline, "PPP") : <span>Pick a deadline</span>}
+                      {projectDeadline && (
+                        <X
+                          className="ml-auto size-3.5 opacity-60 hover:opacity-100"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setProjectDeadline(undefined);
+                          }}
+                        />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={projectDeadline}
+                      onSelect={setProjectDeadline}
+                      disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </Card>
           <Card className="p-6 col-span-full">
             <div className="space-y-4">
               <div>
@@ -435,40 +584,72 @@ export function ClientNewView() {
                 </p>
               </div>
 
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {managers.map((manager) => (
-                  <button
-                    key={manager.id}
+              {assignmentPeopleQuery.isLoading && (
+                <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                  Loading managers from Supabase...
+                </div>
+              )}
+
+              {assignmentPeopleQuery.isError && (
+                <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
+                  <div className="font-medium text-destructive">Unable to load managers</div>
+                  <p className="mt-1 text-muted-foreground">
+                    {assignmentPeopleQuery.error instanceof Error
+                      ? assignmentPeopleQuery.error.message
+                      : "Please try again."}
+                  </p>
+                  <Button
                     type="button"
-                    onClick={() => setSelectedManager(manager.id)}
-                    className={cn(
-                      "border rounded-lg p-4 text-left transition-all",
-                      selectedManager === manager.id
-                        ? "border-primary bg-primary/5"
-                        : "hover:border-primary/40"
-                    )}
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => assignmentPeopleQuery.refetch()}
                   >
-                    <div className="flex items-center gap-3">
-                      <Avatar>
-                        <AvatarImage src={manager.avatar} />
-                        <AvatarFallback>
-                          {manager.name[0]}
-                        </AvatarFallback>
-                      </Avatar>
+                    Retry
+                  </Button>
+                </div>
+              )}
 
-                      <div>
-                        <div className="font-medium">
-                          {manager.name}
-                        </div>
+              {!assignmentPeopleQuery.isLoading &&
+                !assignmentPeopleQuery.isError &&
+                managers.length === 0 && (
+                  <div className="rounded-lg border p-4 text-sm text-muted-foreground">
+                    No Supabase managers found for Production Head or Senior Graphic Designer.
+                  </div>
+                )}
 
-                        <div className="text-xs text-muted-foreground">
-                          {manager.department}
+              {!assignmentPeopleQuery.isLoading && !assignmentPeopleQuery.isError && managers.length > 0 && (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {managers.map((manager) => (
+                    <button
+                      key={manager.id}
+                      type="button"
+                      onClick={() => setSelectedManager(manager.id)}
+                      className={cn(
+                        "border rounded-lg p-4 text-left transition-all",
+                        selectedManager === manager.id
+                          ? "border-primary bg-primary/5"
+                          : "hover:border-primary/40",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar>
+                          <AvatarImage src={manager.avatar} />
+                          <AvatarFallback>{manager.name[0]}</AvatarFallback>
+                        </Avatar>
+
+                        <div>
+                          <div className="font-medium">{manager.name}</div>
+
+                          <div className="text-xs text-muted-foreground">
+                            {manager.department}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </Card>
         </div>
@@ -476,9 +657,9 @@ export function ClientNewView() {
           <Button asChild variant="outline">
             <Link to={clientsTo}>Cancel</Link>
           </Button>
-          <Button onClick={handleSubmit}>
+          <Button onClick={handleSubmit} disabled={createClientMutation.isPending}>
             <Plus className="size-4" />
-            Create client
+            {createClientMutation.isPending ? "Creating..." : "Create client"}
           </Button>
         </div>
       </main>
@@ -553,6 +734,7 @@ function WorkflowCanvas({
   setEdges,
   fullscreen,
   setFullscreen,
+  team,
 }: {
   nodes: FlowNode[];
   edges: FlowEdge[];
@@ -560,6 +742,7 @@ function WorkflowCanvas({
   setEdges: React.Dispatch<React.SetStateAction<FlowEdge[]>>;
   fullscreen: boolean;
   setFullscreen: (v: boolean) => void;
+  team: ClientAssignmentPerson[];
 }) {
   return (
     <ReactFlowProvider>
@@ -570,6 +753,7 @@ function WorkflowCanvas({
         setEdges={setEdges}
         fullscreen={fullscreen}
         setFullscreen={setFullscreen}
+        team={team}
       />
     </ReactFlowProvider>
   );
@@ -582,6 +766,7 @@ function CanvasInner({
   setEdges,
   fullscreen,
   setFullscreen,
+  team,
 }: {
   nodes: FlowNode[];
   edges: FlowEdge[];
@@ -589,15 +774,16 @@ function CanvasInner({
   setEdges: React.Dispatch<React.SetStateAction<FlowEdge[]>>;
   fullscreen: boolean;
   setFullscreen: (v: boolean) => void;
+  team: ClientAssignmentPerson[];
 }) {
   const [filter, setFilter] = useState<TeamFilter>("all");
   const { screenToFlowPosition } = useReactFlow();
 
   const teammates = useMemo(() => {
-    if (filter === "managers") return allTeam.filter((u) => u.role === "manager");
-    if (filter === "members") return allTeam.filter((u) => u.role === "employee");
-    return allTeam;
-  }, [filter]);
+    if (filter === "managers") return team.filter((u) => u.role === "manager");
+    if (filter === "members") return team.filter((u) => u.role === "employee");
+    return team;
+  }, [filter, team]);
 
   const removeNode = useCallback(
     (id: string) => {
@@ -670,7 +856,7 @@ function CanvasInner({
     (e: React.DragEvent) => {
       e.preventDefault();
       const userId = e.dataTransfer.getData("application/reactflow");
-      const u = allTeam.find((t) => t.id === userId);
+      const u = team.find((t) => t.id === userId);
       if (!u) return;
       const position = screenToFlowPosition({ x: e.clientX, y: e.clientY });
       const newNode: FlowNode = {
@@ -689,7 +875,7 @@ function CanvasInner({
       };
       setNodes((nds) => nds.concat(newNode));
     },
-    [screenToFlowPosition, setNodes, removeNode],
+    [screenToFlowPosition, setNodes, removeNode, team],
   );
 
   // ensure existing nodes always have latest removeNode

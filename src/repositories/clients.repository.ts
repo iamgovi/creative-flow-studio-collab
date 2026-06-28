@@ -3,11 +3,33 @@ import type { Database } from "@/types/database";
 import type { Client } from "@/types/client";
 
 const CLIENT_COLUMNS =
-  "id,name,contact_email,industry,notes,monthly_revenue,setup_fee,created_by,created_at,updated_at";
+  "id,name,contact_email,industry,notes,monthly_revenue,setup_fee,contract_months,is_contract,static_count,video_count,deadline,created_by,created_at,updated_at";
 const PROJECT_COLUMNS =
   "id,name,client,type,current_stage,progress,owner_id,deadline,created_at,updated_at,status,client_id";
+const USER_COLUMNS = "id";
 
 export type ClientProjectRow = Database["public"]["Tables"]["projects"]["Row"];
+export type ClientInsert = Database["public"]["Tables"]["clients"]["Insert"];
+export type ClientWorkflowRow = Database["public"]["Tables"]["client_workflows"]["Row"];
+export type ClientWorkflowInsert = Database["public"]["Tables"]["client_workflows"]["Insert"];
+export type ProjectInsert = Database["public"]["Tables"]["projects"]["Insert"];
+export type UserRow = Database["public"]["Tables"]["users"]["Row"];
+
+function supabaseError(error: unknown, operation: string): Error {
+  if (error instanceof Error) return error;
+
+  const record = error as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+  const message =
+    typeof record?.message === "string" && record.message.trim()
+      ? record.message
+      : "Supabase request failed.";
+  const details =
+    typeof record?.details === "string" && record.details.trim() ? ` Details: ${record.details}` : "";
+  const hint = typeof record?.hint === "string" && record.hint.trim() ? ` Hint: ${record.hint}` : "";
+  const code = typeof record?.code === "string" && record.code.trim() ? ` (${record.code})` : "";
+
+  return new Error(`${operation} failed${code}: ${message}${details}${hint}`);
+}
 
 export async function fetchClients(): Promise<Client[]> {
   const { data, error } = await getSupabaseClient()
@@ -15,7 +37,7 @@ export async function fetchClients(): Promise<Client[]> {
     .select(CLIENT_COLUMNS)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Fetch clients");
 
   return data ?? [];
 }
@@ -27,7 +49,7 @@ export async function fetchClientById(id: string): Promise<Client | null> {
     .eq("id", id)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Fetch client");
 
   return data;
 }
@@ -38,7 +60,102 @@ export async function fetchClientProjects(): Promise<ClientProjectRow[]> {
     .select(PROJECT_COLUMNS)
     .order("created_at", { ascending: false });
 
-  if (error) throw error;
+  if (error) throw supabaseError(error, "Fetch client projects");
 
   return data ?? [];
 }
+
+async function resolveClientCreatedById(authUserId: string): Promise<string | null> {
+  const { data, error } = await getSupabaseClient()
+    .from("users")
+    .select(USER_COLUMNS)
+    .eq("id", authUserId)
+    .maybeSingle();
+
+  if (error) throw supabaseError(error, "Resolve client creator");
+
+  return data?.id ?? null;
+}
+
+export async function createClient(input: Omit<ClientInsert, "created_by">): Promise<Client> {
+  const supabase = getSupabaseClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError) throw supabaseError(userError, "Read signed-in user");
+  if (!user) throw new Error("You must be signed in to create a client.");
+
+  const createdBy = await resolveClientCreatedById(user.id);
+  const payload = { ...input, created_by: createdBy };
+  const { data, error } = await supabase
+    .from("clients")
+    .insert(payload)
+    .select(CLIENT_COLUMNS)
+    .single();
+
+  if (error) throw supabaseError(error, "Create client");
+
+  return data;
+}
+
+export async function createClientWorkflows(
+  rows: ClientWorkflowInsert[],
+): Promise<ClientWorkflowRow[]> {
+  if (rows.length === 0) return [];
+
+  const { data, error } = await getSupabaseClient()
+    .from("client_workflows")
+    .insert(rows)
+    .select("id,client_id,workflow_type,created_at");
+
+  if (error) throw supabaseError(error, "Create client workflows");
+
+  return data ?? [];
+}
+
+export async function createProject(input: ProjectInsert): Promise<ClientProjectRow> {
+  const { data, error } = await getSupabaseClient()
+    .from("projects")
+    .insert(input)
+    .select(PROJECT_COLUMNS)
+    .single();
+
+  if (error) throw supabaseError(error, "Create initial project");
+
+  return data;
+}
+
+export async function deleteClientWorkflows(clientId: string): Promise<void> {
+  const { error } = await getSupabaseClient()
+    .from("client_workflows")
+    .delete()
+    .eq("client_id", clientId);
+
+  if (error) throw supabaseError(error, "Delete client workflows");
+}
+
+export async function deleteClientProjects(clientId: string): Promise<void> {
+  const { error } = await getSupabaseClient().from("projects").delete().eq("client_id", clientId);
+
+  if (error) throw supabaseError(error, "Delete client projects");
+}
+
+export async function deleteClient(id: string): Promise<void> {
+  const { error } = await getSupabaseClient().from("clients").delete().eq("id", id);
+
+  if (error) throw supabaseError(error, "Delete client");
+}
+
+export const clientsRepository = {
+  fetchClients,
+  fetchClientById,
+  fetchClientProjects,
+  createClient,
+  createClientWorkflows,
+  createProject,
+  deleteClientProjects,
+  deleteClientWorkflows,
+  deleteClient,
+};

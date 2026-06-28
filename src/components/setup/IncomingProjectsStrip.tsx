@@ -4,10 +4,34 @@ import { Button } from "@/components/ui/button";
 import { PriorityChip } from "@/components/badges";
 import { Film, Image as ImageIcon, ArrowRight, Clock } from "lucide-react";
 import { formatDistanceToNow, differenceInDays } from "date-fns";
-import { incomingProjects } from "@/data/mockSetup";
 import { cn } from "@/lib/utils";
+import { useProjects } from "@/hooks/useProjects";
 
 export function IncomingProjectsStrip() {
+  const { incomingProjects, loading, error } = useProjects();
+
+  if (loading) {
+    return (
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Incoming projects
+        </h2>
+        <Card className="p-4 text-sm text-muted-foreground">Loading projects...</Card>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="space-y-3">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Incoming projects
+        </h2>
+        <Card className="p-4 text-sm text-destructive">{error.message}</Card>
+      </section>
+    );
+  }
+
   if (incomingProjects.length === 0) return null;
 
   const isBanner = incomingProjects.length === 1;
@@ -51,9 +75,14 @@ export function IncomingProjectsStrip() {
                   <div className="min-w-0">
                     <div className="font-semibold text-sm truncate">{p.name}</div>
                     <div className="text-xs text-muted-foreground truncate">{p.client}</div>
+                    {p.managerName && (
+                      <div className="text-[11px] text-muted-foreground truncate">
+                        Manager: {p.managerName}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <PriorityChip priority={p.priority} />
+                <PriorityChip priority={p.priority as any} />
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1">

@@ -1,8 +1,15 @@
 import {
+  createClient,
+  createClientWorkflows,
+  createProject,
+  deleteClient,
+  deleteClientProjects,
+  deleteClientWorkflows,
   fetchClientById,
   fetchClientProjects,
   fetchClients,
   type ClientProjectRow,
+  type ProjectInsert,
 } from "@/repositories/clients.repository";
 import type { Client } from "@/types/client";
 
@@ -47,6 +54,28 @@ export interface ClientsPageData {
     revenueTrend: string;
   };
 }
+
+export type CreateClientProjectType = "video" | "static";
+
+export interface CreateClientInput {
+  name: string;
+  contactEmail: string;
+  industry: string;
+  notes: string;
+  monthlyRevenue: string;
+  setupFee: string;
+  months: string;
+  isContract: boolean;
+  staticCount: string;
+  videoCount: string;
+  deadline?: Date;
+  selectedManagerId: string;
+  projectName: string;
+  projectType: CreateClientProjectType | "";
+  projectDeadline?: Date;
+}
+
+const DEFAULT_CLIENT_WORKFLOW_TYPES = ["static", "video"];
 
 const PLACEHOLDER_REVENUE_TREND: ClientRevenueTrendPoint[] = [
   { month: "Jun", revenue: 92, new: 2 },
@@ -140,9 +169,154 @@ function mapDeliverables(projects: ClientProjectRow[]): ClientDeliverableRow[] {
   }));
 }
 
-export const clientService = {
+function nullableText(value: string) {
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function parseRequiredNumber(value: string, label: string, min: number) {
+  if (value.trim() === "") throw new Error(`${label} is required.`);
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be a valid number.`);
+  if (parsed < min) throw new Error(`${label} must be at least ${min}.`);
+
+  return parsed;
+}
+
+function parseOptionalMoney(value: string, label: string) {
+  if (value.trim() === "") return 0;
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be a valid number.`);
+  if (parsed < 0) throw new Error(`${label} cannot be negative.`);
+
+  return parsed;
+}
+
+function assertValidEmail(value: string) {
+  const email = value.trim();
+  if (!email) throw new Error("Primary contact email is required.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Enter a valid primary contact email.");
+  }
+
+  return email;
+}
+
+function validateDeadline(value: Date | undefined, label = "Deadline") {
+  if (!value) return null;
+  if (Number.isNaN(value.getTime())) throw new Error(`${label} must be a valid date.`);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deadline = new Date(value);
+  deadline.setHours(0, 0, 0, 0);
+  if (deadline < today) throw new Error(`${label} cannot be in the past.`);
+
+  return value.toISOString();
+}
+
+function validateRequiredDate(value: Date | undefined, label: string) {
+  const iso = validateDeadline(value, label);
+  if (!iso) throw new Error(`${label} is required.`);
+
+  return iso;
+}
+
+function mapCreateClientInput(input: CreateClientInput) {
+  const name = input.name.trim();
+  if (!name) throw new Error("Client name is required.");
+
+  return {
+    name,
+    contact_email: assertValidEmail(input.contactEmail),
+    industry: nullableText(input.industry),
+    notes: nullableText(input.notes),
+    monthly_revenue: parseRequiredNumber(input.monthlyRevenue, "Monthly revenue", 0),
+    setup_fee: parseOptionalMoney(input.setupFee, "Setup fee"),
+    contract_months: parseRequiredNumber(input.months, "Number of months", 1),
+    is_contract: input.isContract,
+    static_count: parseRequiredNumber(input.staticCount, "Static deliverables per month", 0),
+    video_count: parseRequiredNumber(input.videoCount, "Video creatives per month", 0),
+    deadline: validateDeadline(input.deadline),
+  };
+}
+
+function mapCreateProjectInput(input: CreateClientInput, clientId: string): ProjectInsert {
+  const name = input.projectName.trim();
+  if (!name) throw new Error("Project name is required.");
+
+  if (input.projectType !== "video" && input.projectType !== "static") {
+    throw new Error("Project type is required.");
+  }
+
+  const ownerId = input.selectedManagerId.trim();
+  if (!ownerId) throw new Error("Select a project manager before creating a client.");
+
+  return {
+    name,
+    type: input.projectType,
+    deadline: validateRequiredDate(input.projectDeadline, "Project deadline"),
+    owner_id: ownerId,
+    client_id: clientId,
+    client: input.name.trim(),
+    status: "active",
+    progress: 0,
+    current_stage: "planning",
+  };
+}
+
+async function rollbackCreatedClient(clientId: string) {
+  const results = await Promise.allSettled([
+    deleteClientProjects(clientId),
+    deleteClientWorkflows(clientId),
+    deleteClient(clientId),
+  ]);
+  const failed = results.find((result) => result.status === "rejected");
+
+  if (failed?.status === "rejected") {
+    throw failed.reason;
+  }
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+export const clientsService = {
   getClients: fetchClients,
   getClientById: fetchClientById,
+  async createClient(input: CreateClientInput): Promise<Client> {
+    const client = await createClient(mapCreateClientInput(input));
+
+    try {
+      try {
+        await createClientWorkflows(
+          DEFAULT_CLIENT_WORKFLOW_TYPES.map((workflowType) => ({
+            client_id: client.id,
+            workflow_type: workflowType,
+          })),
+        );
+      } catch (workflowError) {
+        console.warn(errorMessage(workflowError, "Create client workflows failed."));
+      }
+
+      await createProject(mapCreateProjectInput(input, client.id));
+    } catch (error) {
+      try {
+        await rollbackCreatedClient(client.id);
+      } catch (rollbackError) {
+        const rollbackMessage = errorMessage(rollbackError, "rollback failed");
+        const originalMessage = errorMessage(error, "client setup failed");
+        throw new Error(`${originalMessage} The client was created, but rollback failed: ${rollbackMessage}`);
+      }
+
+      throw error;
+    }
+
+    return client;
+  },
   async getClientsPageData(): Promise<ClientsPageData> {
     const [clients, projects] = await Promise.all([fetchClients(), fetchClientProjects()]);
     const clientRows = mapClientRows(clients, projects);
@@ -169,3 +343,5 @@ export const clientService = {
     };
   },
 };
+
+export const clientService = clientsService;
