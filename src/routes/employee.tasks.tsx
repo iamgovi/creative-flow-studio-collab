@@ -19,7 +19,7 @@ import { useActiveTask } from "@/hooks/useActiveTask";
 import { myProjects, type MyTask, type MyProjectType } from "@/data/myTasks";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
+import { getSupabaseClient } from "@/repositories/supabase/client";
 export const Route = createFileRoute("/employee/tasks")({
   head: () => ({
     meta: [
@@ -34,7 +34,8 @@ type SortKey = "deadline" | "priority" | "updated" | "project";
 const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 } as const;
 
 function MyTasksPage() {
-  const tasks = useActiveTask((s) => s.tasks);
+  
+  const supabase = getSupabaseClient();
   const submitForReview = useActiveTask((s) => s.submitForReview);
   const pendingSwitchId = useActiveTask((s) => s.pendingSwitchId);
   const setPendingSwitch = useActiveTask((s) => s.setPendingSwitch);
@@ -42,9 +43,88 @@ function MyTasksPage() {
   const startTask = useActiveTask((s) => s.startTask);
   const pauseTask = useActiveTask((s) => s.pauseTask);
   const navigate = useNavigate();
+  const [department, setDepartment] = useState("");
 
   const [loading, setLoading] = useState(true);
-  useEffect(() => { const t = setTimeout(() => setLoading(false), 400); return () => clearTimeout(t); }, []);
+  const [tasks, setTasks] = useState<any[]>([]);
+  console.log("RENDER TASKS", tasks);
+  useEffect(() => {
+  console.log("TASKS CHANGED", tasks);
+}, [tasks]);
+  useEffect(() => {
+    async function loadTasks() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        const { data: employee } = await supabase
+  .from("users")
+  .select("department")
+  .eq("id", user.id)
+  .single();
+
+console.log("EMPLOYEE", employee);
+if (employee) {
+  setDepartment(employee.department);
+}
+
+        console.log("AUTH USER", user);
+
+        if (!user) return;
+
+        console.log("FETCHING TASKS...");
+
+        const { data, error } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("assignee_id", user.id)
+          .order("created_at", { ascending: false });
+
+        console.log("RAW DATA", data);
+        console.log("RAW ERROR", error);
+
+        if (error) {
+          console.error(error);
+          return;
+        }
+
+        const mappedTasks = (data || []).map((task) => ({
+  id: task.id,
+  title: task.title,
+  priority: task.priority,
+  deadline: task.deadline,
+
+  deliverableType: task.deliverable_type, // ADD THIS
+
+  lifecycle:
+    task.status === "done"
+      ? "done"
+      : task.status === "in_progress"
+      ? "in_progress"
+      : task.status === "review"
+      ? "review"
+      : task.status === "revision"
+      ? "revision"
+      : "assigned",
+
+  projectId: task.project_id || "default",
+
+  accumulatedMin: task.time_spent_minutes || 0,
+  runningSince: task.started_at,
+  submittedAt: task.completed_at,
+}));
+        console.log("MAPPED TASKS", mappedTasks);
+        setTasks(mappedTasks);
+        console.log("FIRST TASK", mappedTasks[0]);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadTasks();
+  }, []);
 
   const [typeFilter, setTypeFilter] = useState<"all" | MyProjectType>("all");
   const [search, setSearch] = useState("");
@@ -58,9 +138,10 @@ function MyTasksPage() {
   const visible = useMemo(() => {
     let out = tasks;
     if (typeFilter !== "all") {
-      const ids = new Set(myProjects.filter((p) => p.type === typeFilter).map((p) => p.id));
-      out = out.filter((t) => ids.has(t.projectId));
-    }
+  out = out.filter(
+    (t) => t.deliverableType === typeFilter
+  );
+}
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter((t) => t.title.toLowerCase().includes(q));
@@ -101,6 +182,8 @@ function MyTasksPage() {
     const revision = tasks.filter((t) => t.lifecycle === "revision").length;
     return { active, review, revision };
   }, [tasks]);
+
+  console.log("TASKS STATE", tasks);
 
   const isEmpty = tasks.length === 0;
 
@@ -147,7 +230,11 @@ function MyTasksPage() {
           </div>
 
           <div className="ml-auto flex items-center gap-2 flex-wrap">
-            <SegmentedType value={typeFilter} onChange={setTypeFilter} />
+           <SegmentedType
+  value={typeFilter}
+  onChange={setTypeFilter}
+  department={department}
+/>
             <div className="relative">
               <Search className="size-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -185,7 +272,12 @@ function MyTasksPage() {
             loading={loading}
             store={useActiveTask}
             onSubmit={(t) => setSubmitTask(t)}
-            onOpenDetail={(t) => navigate({ to: "/my-tasks/$taskId", params: { taskId: t.id } })}
+            onOpenDetail={(t) =>
+  navigate({
+    to: "/employee/tasks/$taskId",
+    params: { taskId: t.id },
+  })
+}
           />
         )}
       </div>
@@ -261,12 +353,35 @@ function Shortcut({ keys, desc }: { keys: string[]; desc: string }) {
   );
 }
 
-function SegmentedType({ value, onChange }: { value: "all" | MyProjectType; onChange: (v: "all" | MyProjectType) => void }) {
-  const opts: { v: "all" | MyProjectType; label: string }[] = [
-    { v: "all", label: "All Deliverables" },
-    { v: "video", label: "Video" },
+function SegmentedType({
+  value,
+  onChange,
+  department,
+}: {
+  value: "all" | MyProjectType;
+  onChange: (v: "all" | MyProjectType) => void;
+  department: string;
+}) {
+  let opts: { v: "all" | MyProjectType; label: string }[] = [];
+
+if (department === "Video Producer") {
+  opts = [
+    { v: "video", label: "Shoot" },
+    { v: "edit", label: "Edit" },
+  ];
+}
+
+else if (department === "Content Writer") {
+  opts = [
+    { v: "video", label: "Shoot" },
+    { v: "edit", label: "Edit" },
     { v: "static", label: "Static" },
   ];
+}
+
+else if (department === "Graphic Designer") {
+  return null;
+}
   return (
     <div className="inline-flex rounded-md border bg-card p-0.5 text-sm">
       {opts.map((o) => (

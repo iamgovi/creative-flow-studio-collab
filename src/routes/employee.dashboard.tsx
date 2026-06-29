@@ -11,9 +11,8 @@ import { StatusBadge, PriorityChip } from "@/components/badges";
 import type { TaskStatus } from "@/data/mock";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { formatDistanceToNow } from "date-fns";
-
 export const Route = createFileRoute("/employee/dashboard")({ component: EmployeeDashboard });
-
+import { getSupabaseClient } from "@/repositories/supabase/client";
 function fmt(min: number) {
   const h = Math.floor(min / 60);
   const m = min % 60;
@@ -28,15 +27,45 @@ function greeting() {
 }
 
 function EmployeeDashboard() {
-  const myTasksAll = useActiveTask((s) => s.tasks);
-  const myTasks = myTasksAll.slice(0, 6);
+  const supabase = getSupabaseClient();
+  const [tick, setTick] = useState(0);
+  const [employee, setEmployee] = useState<any>(null);
+  const [myTasksAll, setMyTasksAll] = useState<any[]>([]);
   const review = myTasksAll.filter((t) => t.lifecycle === "review");
   const revision = myTasksAll.filter((t) => t.lifecycle === "revision");
-
-  const [tick, setTick] = useState(0);
+  const myTasks = myTasksAll.slice(0, 6);
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
+  }, []);
+  useEffect(() => {
+    async function loadDashboard() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      setEmployee(profile);
+
+      const { data: tasks } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("assignee_id", user.id)
+        .order("created_at", { ascending: false });
+
+      console.log("USER ID:", user.id);
+      console.log("TASKS:", tasks);  
+      setMyTasksAll(tasks || []);
+    }
+
+    loadDashboard();
   }, []);
 
   return (
@@ -44,7 +73,7 @@ function EmployeeDashboard() {
       <div className="space-y-6 max-w-7xl">
         <div>
           {(() => { const g = greeting(); return (
-            <h1 className="text-2xl font-semibold tracking-tight">{g.emoji} {g.text}, {currentEmployee.name.split(" ")[0]}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{g.emoji} {g.text}, {employee?.full_name?.split(" ")[0] || "Employee"}</h1>
           ); })()}
           <p className="text-sm text-muted-foreground">Here’s what you’re working on today.</p>
         </div>
