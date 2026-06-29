@@ -14,6 +14,7 @@ import { useActiveTask } from "@/hooks/useActiveTask";
 import { myProjects } from "@/data/myTasks";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getSupabaseClient } from "@/repositories/supabase/client";
 
 export const Route = createFileRoute("/employee/tasks_/$taskId")({
   head: () => ({
@@ -46,13 +47,41 @@ const ICONS = {
 function TaskDetailPage() {
   const { taskId } = Route.useParams();
   const navigate = useNavigate();
-  const task = useActiveTask((s) => s.tasks.find((t) => t.id === taskId));
+  const supabase = getSupabaseClient();
+  //const task = useActiveTask((s) => s.tasks.find((t) => t.id === taskId));
+  const [task, setTask] = useState<any>(null);
+  useEffect(() => {
+  async function loadTask() {
+    console.log("LOADING TASK", taskId);
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("id", taskId)
+      .single();
+
+    console.log("TASK DATA", data);
+    console.log("TASK ERROR", error);
+console.log("OBJECTIVE", data?.objective);
+console.log("DELIVERABLE", data?.deliverable);
+console.log("TONE", data?.tone);
+
+    if (!error) {
+      setTask(data);
+    }
+  }
+
+  loadTask();
+}, [taskId]);
   const submitForReview = useActiveTask((s) => s.submitForReview);
 
   const project = useMemo(
     () => task ? myProjects.find((p) => p.id === task.projectId) : undefined,
     [task],
   );
+  console.log("PROJECT", project);
+  console.log("TASK PROJECT_ID", task?.project_id);
+console.log("TASK PROJECTID", task?.projectId);
 
   const [files, setFiles] = useState<File[]>([]);
   const [note, setNote] = useState("");
@@ -76,16 +105,19 @@ function TaskDetailPage() {
     const sec = s % 60;
     return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
   };
-  const toggleTimer = () => {
-    if (running) {
-      setAccumMs((a) => a + (runStart ? Date.now() - runStart : 0));
-      setRunStart(null);
-      setRunning(false);
-    } else {
-      setRunStart(Date.now());
-      setRunning(true);
-    }
-  };
+  const toggleTimer = async () => {
+  console.log("START BUTTON CLICKED");
+  alert("START BUTTON CLICKED");
+
+  if (running) {
+    setAccumMs((a) => a + (runStart ? Date.now() - runStart : 0));
+    setRunStart(null);
+    setRunning(false);
+  } else {
+    setRunStart(Date.now());
+    setRunning(true);
+  }
+};
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -94,7 +126,7 @@ function TaskDetailPage() {
     if (dropped.length) setFiles((prev) => [...prev, ...dropped]);
   }, []);
 
-  if (!task || !project) {
+  if (!task) {
     return (
       <AppShell>
         <div className="max-w-3xl mx-auto py-16 text-center space-y-4">
@@ -127,19 +159,30 @@ function TaskDetailPage() {
               <Link to="/my-tasks"><ArrowLeft className="size-4" /> My Tasks</Link>
             </Button>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Briefcase className="size-3.5" />
-              <span>{project.name}</span>
-              <span>·</span>
-              <span>{project.stage}</span>
-              <Badge variant="secondary" className="ml-1 capitalize">{project.type}</Badge>
-            </div>
+  <Briefcase className="size-3.5" />
+
+  <span>{project?.name ?? "No Project"}</span>
+
+  {project && (
+    <>
+      <span>·</span>
+      <span>{project.stage}</span>
+
+      <Badge variant="secondary" className="ml-1 capitalize">
+        {project?.type}
+      </Badge>
+    </>
+  )}
+</div>
             <h1 className="text-2xl font-semibold tracking-tight">{task.title}</h1>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Calendar className="size-3.5" /> Due {new Date(task.deadline).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </span>
               <span className="capitalize">Priority: {task.priority}</span>
-              <span className="capitalize">Status: {task.lifecycle.replace("_", " ")}</span>
+              <span className="capitalize">
+  Status: {task.status || task.lifecycle || "Pending"}
+</span>
             </div>
           </div>
 
@@ -189,18 +232,15 @@ function TaskDetailPage() {
               <div className="rounded-lg border bg-muted/30 p-4 space-y-3 text-sm leading-relaxed">
                 <p>
                   <span className="font-semibold">Objective: </span>
-                  Deliver a polished {project.type === "video" ? "video edit" : "design set"} that reflects
-                  the brand's premium positioning while remaining approachable for a broader audience.
+                  {task.objective || "No objective provided"}
                 </p>
                 <p>
                   <span className="font-semibold">Tone: </span>
-                  Confident, clean, modern. Avoid heavy stylization.
+                  {task.tone || "No tone specified"}
                 </p>
                 <p>
                   <span className="font-semibold">Deliverables: </span>
-                  {project.type === "video"
-                    ? "One 60s master cut + 9:16 vertical and 1:1 square cutdowns."
-                    : "Hero key visual + 3 social variants (1:1, 4:5, 9:16)."}
+                  {task.deliverable || "No deliverables specified"}
                 </p>
                 <p className="text-muted-foreground italic">
                   Notes: Maintain the approved color palette. Use only licensed assets supplied below.

@@ -10,8 +10,10 @@ export type Lifecycle =
   | "done";
 
 export type MyPriority = "low" | "medium" | "high" | "critical";
-export type MyProjectType = "video" | "static";
-
+export type MyProjectType =
+  | "shoot"
+  | "edit"
+  | "static";
 export interface MyProject {
   id: string;
   name: string;
