@@ -4,9 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users as UsersIcon, Briefcase, ShieldAlert, UserPlus, FolderKanban, Inbox } from "lucide-react";
-import { users, auditEvents } from "@/data/mock";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useRecentSecurityEvents } from "@/hooks/useAuditLogs";
 import {
   useAdminDashboardClients,
   useAdminDashboardKpis,
@@ -19,12 +19,10 @@ function AdminDashboard() {
   const kpisQuery = useAdminDashboardKpis();
   const teamMatesQuery = useAdminDashboardTeamMates();
   const clientsQuery = useAdminDashboardClients();
+  const securityQuery = useRecentSecurityEvents();
   const employees = teamMatesQuery.data ?? [];
   const clients = clientsQuery.data ?? [];
-
-  const security = auditEvents
-    .filter((e) => ["USER_LOGIN", "ROLE_CHANGED"].includes(e.action))
-    .slice(0, 5);
+  const security = securityQuery.data ?? [];
 
   const kpis = [
     {
@@ -196,21 +194,35 @@ function AdminDashboard() {
             <ShieldAlert className="size-4 text-status-overdue" /> Recent security events
           </div>
           <ul className="space-y-3 text-sm">
-            {security.map((e) => {
-              const u = users.find((x) => x.id === e.actorId)!;
-              return (
-                <li key={e.id} className="flex items-start gap-3">
-                  <div className={cn("mt-1 size-1.5 rounded-full", e.action === "ROLE_CHANGED" ? "bg-status-overdue" : "bg-status-review")} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate">
-                      <span className="font-medium">{u.name}</span>{" "}
-                      <span className="text-muted-foreground">— {e.action.replace(/_/g, " ").toLowerCase()}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">{e.ip} · {formatDistanceToNow(new Date(e.ts), { addSuffix: true })}</div>
+            {security.map((event) => (
+              <li key={event.id} className="flex items-start gap-3">
+                <div className={cn("mt-1 size-1.5 rounded-full", event.action === "EMPLOYEE_LOGOUT" ? "bg-status-overdue" : "bg-status-review")} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate">
+                    <span className="font-medium">{event.user}</span>{" "}
+                    <span className="text-muted-foreground">— {event.actionLabel}</span>
                   </div>
-                </li>
-              );
-            })}
+                  <div className="text-xs text-muted-foreground">
+                    Attendance · {formatDistanceToNow(new Date(event.timestamp), { addSuffix: true })}
+                  </div>
+                </div>
+              </li>
+            ))}
+            {securityQuery.isLoading && (
+              <li className="py-8 text-center text-sm text-muted-foreground">
+                Loading security events...
+              </li>
+            )}
+            {securityQuery.isError && (
+              <li className="py-8 text-center text-sm text-destructive">
+                {securityQuery.error.message}
+              </li>
+            )}
+            {!securityQuery.isLoading && !securityQuery.isError && security.length === 0 && (
+              <li className="py-8 text-center text-sm text-muted-foreground">
+                No recent security events.
+              </li>
+            )}
           </ul>
         </Card>
       </div>

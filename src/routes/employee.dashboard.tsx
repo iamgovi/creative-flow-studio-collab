@@ -11,6 +11,9 @@ import { StatusBadge, PriorityChip } from "@/components/badges";
 import type { TaskStatus } from "@/data/mock";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
+import { useClockOutAttendance, useTodayAttendance } from "@/hooks/useAttendance";
+import { attendanceService } from "@/services/attendance.service";
 export const Route = createFileRoute("/employee/dashboard")({ component: EmployeeDashboard });
 import { getSupabaseClient } from "@/repositories/supabase/client";
 function fmt(min: number) {
@@ -26,6 +29,10 @@ function greeting() {
   return { text: "Good evening", emoji: "🌇" };
 }
 
+function fmtClock(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 function EmployeeDashboard() {
   const supabase = getSupabaseClient();
   const [tick, setTick] = useState(0);
@@ -34,6 +41,23 @@ function EmployeeDashboard() {
   const review = myTasksAll.filter((t) => t.lifecycle === "review");
   const revision = myTasksAll.filter((t) => t.lifecycle === "revision");
   const myTasks = myTasksAll.slice(0, 6);
+  const attendanceQuery = useTodayAttendance(employee?.id);
+  const clockOutMutation = useClockOutAttendance(employee?.id);
+  const attendance = attendanceQuery.data ?? null;
+  const workedMinutes = attendanceService.calculateLiveWorkedMinutes(attendance, new Date());
+
+  const handleClockOut = async () => {
+    if (!employee?.id || !attendance?.isWorking) return;
+
+    try {
+      await clockOutMutation.mutateAsync();
+      toast.success("Clocked out", { description: "Your attendance was updated for today." });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to clock out.";
+      toast.error("Clock out failed", { description: message });
+    }
+  };
+
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
@@ -83,14 +107,33 @@ function EmployeeDashboard() {
           <div>
             <div className="text-xs uppercase tracking-wide text-muted-foreground">Attendance</div>
             <div className="mt-1 text-lg">
-              <span className="font-medium">Clocked in</span>
-              <span className="text-muted-foreground"> at 9:14 AM · </span>
-              <span className="font-mono">{fmt(263 + Math.floor(tick / 60))}</span>
-              <span className="text-muted-foreground"> so far today</span>
+              {attendanceQuery.isLoading ? (
+                <span className="text-muted-foreground">Loading attendance...</span>
+              ) : attendanceQuery.isError ? (
+                <span className="text-destructive">Unable to load attendance</span>
+              ) : attendance ? (
+                <>
+                  <span className="font-medium">{attendance.isWorking ? "Clocked in" : "Clocked out"}</span>
+                  <span className="text-muted-foreground">
+                    {" "}
+                    at {fmtClock(attendance.isWorking ? attendance.clockIn : attendance.clockOut ?? attendance.clockIn)} ·{" "}
+                  </span>
+                  <span className="font-mono">{fmt(workedMinutes)}</span>
+                  <span className="text-muted-foreground">
+                    {attendance.isWorking ? " so far today" : " worked today"}
+                  </span>
+                </>
+              ) : (
+                <span className="text-muted-foreground">No attendance record for today</span>
+              )}
             </div>
           </div>
-          <Button variant="outline" asChild>
-            <Link to="/"><LogOut className="size-4" /> Clock out</Link>
+          <Button
+            variant="outline"
+            onClick={handleClockOut}
+            disabled={!attendance?.isWorking || clockOutMutation.isPending}
+          >
+            <LogOut className="size-4" /> {clockOutMutation.isPending ? "Clocking out..." : "Clock out"}
           </Button>
         </Card>
 

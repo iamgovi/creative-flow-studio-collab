@@ -132,28 +132,6 @@ export const tasks: Task[] = Array.from({ length: 48 }, (_, i) => {
   };
 });
 
-export interface AuditEvent {
-  id: string;
-  ts: string;
-  actorId: string;
-  action: string;
-  target: string;
-  ip: string;
-  details?: Record<string, unknown>;
-}
-
-const ACTIONS = ["TASK_STARTED","TASK_PAUSED","TASK_SUBMITTED","REVIEW_APPROVED","REVISION_REQUESTED","DEADLINE_MODIFIED","USER_LOGIN","USER_LOGOUT","PROJECT_CREATED","ROLE_CHANGED"];
-
-export const auditEvents: AuditEvent[] = Array.from({ length: 220 }, (_, i) => ({
-  id: `a${i + 1}`,
-  ts: new Date(Date.now() - i * 1800_000 - (i % 7) * 3600_000).toISOString(),
-  actorId: users[i % users.length].id,
-  action: pick(ACTIONS, i),
-  target: pick(["task:", "project:", "user:"], i) + (i % 40 + 1),
-  ip: `10.0.${i % 250}.${(i * 7) % 250}`,
-  details: { agent: "web", session: `s${i % 20}` },
-}));
-
 export interface NotificationItem {
   id: string;
   type: "mention" | "review" | "deadline" | "system";

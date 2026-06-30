@@ -31,6 +31,7 @@ import {
   type RoleRecord,
   type InviteMemberInput,
 } from "@/types/employees";
+import { auditService } from "@/services/audit.service";
 
 export interface EmployeesModuleData {
   employees: RoleEmployee[];
@@ -230,11 +231,25 @@ export const employeesService = {
   },
 
   async inviteMember(input: InviteMemberInput): Promise<void> {
+    const email = input.email.trim().toLowerCase();
+    const fullName = input.fullName.trim();
+
     await inviteMemberRequest({
-      fullName: input.fullName.trim(),
-      email: input.email.trim().toLowerCase(),
+      fullName,
+      email,
       password: input.password,
       jobRole: input.jobRole,
+    });
+    await auditService.recordAuditEventSafely({
+      action: "EMPLOYEE_CREATED",
+      target: `employee:${email}`,
+      entityType: "Employee",
+      entityName: fullName || email,
+      description: `Employee ${fullName || email} was invited.`,
+      details: {
+        email,
+        job_role: input.jobRole,
+      },
     });
   },
 
@@ -245,12 +260,26 @@ export const employeesService = {
   }): Promise<void> {
     const role = await insertRole({ name: input.name, description: input.description });
     await replaceRolePermissions(role.id, mapPermissionsForWrite(input.permissions));
+    await auditService.recordAuditEventSafely({
+      action: "ROLE_CREATED",
+      target: `role:${role.id}`,
+      entityType: "Role",
+      entityName: role.name,
+      description: `Role ${role.name} was created.`,
+    });
   },
 
   async updateRole(input: RoleRecord): Promise<void> {
     assertPersistableRole(input.id);
     await updateRole({ id: input.id, name: input.name, description: input.description });
     await replaceRolePermissions(input.id, mapPermissionsForWrite(input.permissions));
+    await auditService.recordAuditEventSafely({
+      action: "ROLE_CHANGED",
+      target: `role:${input.id}`,
+      entityType: "Role",
+      entityName: input.name,
+      description: `Role ${input.name} was updated.`,
+    });
   },
 
   async cloneRole(input: RoleRecord): Promise<void> {
@@ -259,12 +288,26 @@ export const employeesService = {
       description: input.description,
     });
     await replaceRolePermissions(role.id, mapPermissionsForWrite(input.permissions));
+    await auditService.recordAuditEventSafely({
+      action: "ROLE_CREATED",
+      target: `role:${role.id}`,
+      entityType: "Role",
+      entityName: role.name,
+      description: `Role ${role.name} was cloned from ${input.name}.`,
+    });
   },
 
   async deleteEmptyRole(roleId: string): Promise<void> {
     assertPersistableRole(roleId);
     await replaceRolePermissions(roleId, []);
     await deleteRole(roleId);
+    await auditService.recordAuditEventSafely({
+      action: "ROLE_DELETED",
+      target: `role:${roleId}`,
+      entityType: "Role",
+      entityName: roleId,
+      description: `Role ${roleId} was deleted.`,
+    });
   },
 
   async archiveRole(roleId: string, reassignments: Record<string, string>): Promise<void> {
@@ -275,5 +318,15 @@ export const employeesService = {
     }
     await replaceRolePermissions(roleId, []);
     await deleteRole(roleId);
+    await auditService.recordAuditEventSafely({
+      action: "ROLE_DELETED",
+      target: `role:${roleId}`,
+      entityType: "Role",
+      entityName: roleId,
+      description: `Role ${roleId} was archived and deleted.`,
+      details: {
+        reassignment_count: Object.keys(reassignments).length,
+      },
+    });
   },
 };
