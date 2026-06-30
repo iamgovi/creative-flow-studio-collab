@@ -34,6 +34,8 @@ function EmployeeDashboard() {
   const review = myTasksAll.filter((t) => t.lifecycle === "review");
   const revision = myTasksAll.filter((t) => t.lifecycle === "revision");
   const myTasks = myTasksAll.slice(0, 6);
+  const [loginTime, setLoginTime] = useState<string | null>(null);
+  const [workedMinutes, setWorkedMinutes] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(id);
@@ -45,6 +47,24 @@ function EmployeeDashboard() {
       } = await supabase.auth.getUser();
 
       if (!user) return;
+      const { data: attendance } = await supabase
+        .from("employee_attendance")
+        .select("*")
+        .eq("employee_id", user.id)
+        .is("logout_time", null)
+        .order("login_time", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (attendance) {
+        setLoginTime(attendance.login_time);
+
+        const mins = Math.floor(
+          (Date.now() - new Date(attendance.login_time).getTime()) / 60000
+        );
+
+        setWorkedMinutes(mins);
+      }
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -83,11 +103,34 @@ function EmployeeDashboard() {
           <div>
             <div className="text-xs uppercase tracking-wide text-muted-foreground">Attendance</div>
             <div className="mt-1 text-lg">
-              <span className="font-medium">Clocked in</span>
-              <span className="text-muted-foreground"> at 9:14 AM · </span>
-              <span className="font-mono">{fmt(263 + Math.floor(tick / 60))}</span>
-              <span className="text-muted-foreground"> so far today</span>
-            </div>
+            <span className="font-medium">Clocked in</span>
+
+            <span className="text-muted-foreground">
+              {" "}
+              at{" "}
+              {loginTime
+                ? new Date(loginTime).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "--:--"}
+              {" · "}
+            </span>
+
+            <span className="font-mono">
+              {fmt(
+                workedMinutes +
+                  (loginTime
+                    ? Math.floor(
+                        (Date.now() - new Date(loginTime).getTime()) / 60000
+                      ) -
+                      workedMinutes
+                    : 0)
+              )}
+            </span>
+
+            <span className="text-muted-foreground"> so far today</span>
+          </div>
           </div>
           <Button variant="outline" asChild>
             <Link to="/"><LogOut className="size-4" /> Clock out</Link>

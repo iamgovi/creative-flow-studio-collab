@@ -4,12 +4,27 @@ import type { UserProfile } from "@/types/auth";
 
 const PROFILE_COLUMNS = "id,email,full_name,role,avatar_url,created_at";
 const ROLE_COLUMNS = "id,name,description";
+console.log("LOGIN FUNCTION CALLED");
+export async function signInWithPassword(
+  
+  email: string,
+  password: string
+): Promise<Session> {
+  const supabase = getSupabaseClient();
 
-export async function signInWithPassword(email: string, password: string): Promise<Session> {
-  const { data, error } = await getSupabaseClient().auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
   if (error) throw error;
-  if (!data.session) throw new Error("Supabase did not return an authenticated session.");
+  if (!data.session)
+    throw new Error("Supabase did not return an authenticated session.");
+
+  await supabase.from("employee_attendance").insert({
+    employee_id: data.session.user.id,
+    login_time: new Date().toISOString(),
+  });
 
   return data.session;
 }

@@ -1,20 +1,49 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users as UsersIcon, Briefcase, ShieldAlert, UserPlus, ArrowUpRight, FolderKanban } from "lucide-react";
-import { users, projects, auditEvents } from "@/data/mock";
+import { users, projects } from "@/data/mock";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useMemo, useEffect, useState } from "react";
+import { getSupabaseClient } from "@/repositories/supabase/client";
 
 export const Route = createFileRoute("/admin/dashboard")({ component: AdminDashboard });
 
 function AdminDashboard() {
   const employees = useMemo(() => users.filter((u) => u.role !== "admin"), []);
   const activeEmployees = employees.filter((u) => u.status === "active");
+  const supabase = getSupabaseClient();
+  const [security, setSecurity] = useState<any[]>([]);
+  useEffect(() => {
+    async function loadSecurityEvents() {
+      const { data, error } = await supabase
+      .from("employee_attendance")
+      .select("*")
+      .order("login_time", { ascending: false })
+      .limit(5);
 
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      setSecurity(data || []);
+      const employeeIds = (data || []).map((x) => x.employee_id);
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", employeeIds);
+
+      console.log("ATTENDANCE", data);
+      console.log("PROFILES", profiles);
+          }
+
+    loadSecurityEvents();
+  }, []);
   // Aggregate clients from deliverables
   const clients = useMemo(() => {
     const map = new Map<string, { name: string; projects: number; activeProjects: number }>();
@@ -26,10 +55,6 @@ function AdminDashboard() {
     }
     return Array.from(map.values()).sort((a, b) => b.projects - a.projects);
   }, []);
-
-  const security = auditEvents
-    .filter((e) => ["USER_LOGIN", "ROLE_CHANGED"].includes(e.action))
-    .slice(0, 5);
 
   const kpis = [
     { label: "Employees", value: activeEmployees.length, sub: `${employees.length} total`, icon: UsersIcon },
@@ -124,16 +149,22 @@ function AdminDashboard() {
           </div>
           <ul className="space-y-3 text-sm">
             {security.map((e) => {
-              const u = users.find((x) => x.id === e.actorId)!;
               return (
                 <li key={e.id} className="flex items-start gap-3">
                   <div className={cn("mt-1 size-1.5 rounded-full", e.action === "ROLE_CHANGED" ? "bg-status-overdue" : "bg-status-review")} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate">
-                      <span className="font-medium">{u.name}</span>{" "}
-                      <span className="text-muted-foreground">— {e.action.replace(/_/g, " ").toLowerCase()}</span>
+                      <span className="font-medium">
+                        {e.profiles?.full_name ?? "Unknown User"}
+                      </span>{" "}
+                      <span className="text-muted-foreground">
+                        — user login
+                      </span>
                     </div>
-                    <div className="text-xs text-muted-foreground">{e.ip} · {formatDistanceToNow(new Date(e.ts), { addSuffix: true })}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(e.login_time).toLocaleString()} ·{" "}
+                      {formatDistanceToNow(new Date(e.login_time), { addSuffix: true })}
+                    </div>
                   </div>
                 </li>
               );
