@@ -174,6 +174,48 @@ export interface Database {
         };
         Relationships: [];
       };
+      audit_logs: {
+        Row: {
+          id: string;
+          created_at: string;
+          user_id: string | null;
+          action: string;
+          target: string | null;
+          details: Json | null;
+          ip_address: string | null;
+        };
+        Insert: {
+          id?: string;
+          created_at?: string;
+          user_id?: string | null;
+          action: string;
+          target?: string | null;
+          details?: Json | null;
+          ip_address?: string | null;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      employee_attendance: {
+        Row: {
+          id: string;
+          employee_id: string;
+          login_time: string;
+          logout_time: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          employee_id: string;
+          login_time?: string;
+          logout_time?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          logout_time?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

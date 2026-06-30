@@ -6,6 +6,7 @@ import {
   signInWithPassword,
   signOut,
 } from "@/repositories/auth.repository";
+import { attendanceService } from "@/services/attendance.service";
 import type { AppRole, AuthSession, AuthSessionUser } from "@/types/auth";
 
 const ROLE_PRIORITY: AppRole[] = ["admin", "manager", "employee"];
@@ -59,7 +60,13 @@ async function buildSessionUser(session: AuthSession): Promise<AuthSessionUser> 
 export const authService = {
   async signIn(email: string, password: string): Promise<AuthSessionUser> {
     const session = await signInWithPassword(email, password);
-    return buildSessionUser(session);
+    const sessionUser = await buildSessionUser(session);
+
+    if (sessionUser.role === "employee") {
+      await attendanceService.ensureClockedInForTodaySafely(sessionUser.profile.id);
+    }
+
+    return sessionUser;
   },
 
   async signOut(): Promise<void> {

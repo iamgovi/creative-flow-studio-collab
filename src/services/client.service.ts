@@ -11,6 +11,7 @@ import {
   type ClientProjectRow,
   type ProjectInsert,
 } from "@/repositories/clients.repository";
+import { auditService } from "@/services/audit.service";
 import type { Client } from "@/types/client";
 
 export interface ClientListRow {
@@ -289,6 +290,7 @@ export const clientsService = {
   getClientById: fetchClientById,
   async createClient(input: CreateClientInput): Promise<Client> {
     const client = await createClient(mapCreateClientInput(input));
+    let project: ClientProjectRow | null = null;
 
     try {
       try {
@@ -302,7 +304,7 @@ export const clientsService = {
         console.warn(errorMessage(workflowError, "Create client workflows failed."));
       }
 
-      await createProject(mapCreateProjectInput(input, client.id));
+      project = await createProject(mapCreateProjectInput(input, client.id));
     } catch (error) {
       try {
         await rollbackCreatedClient(client.id);
@@ -313,6 +315,42 @@ export const clientsService = {
       }
 
       throw error;
+    }
+
+    await auditService.recordAuditEventSafely({
+      action: "CLIENT_CREATED",
+      target: `client:${client.id}`,
+      entityType: "Client",
+      entityName: client.name,
+      description: `Client ${client.name} was created.`,
+    });
+
+    if (project) {
+      await auditService.recordAuditEventSafely({
+        action: "PROJECT_CREATED",
+        target: `project:${project.id}`,
+        entityType: "Project",
+        entityName: project.name,
+        description: `Initial project ${project.name} was created for ${client.name}.`,
+        details: {
+          client_id: client.id,
+          client_name: client.name,
+          project_type: project.type,
+        },
+      });
+
+      await auditService.recordAuditEventSafely({
+        action: "MANAGER_ASSIGNED",
+        target: `project:${project.id}`,
+        entityType: "Project",
+        entityName: project.name,
+        description: `Manager was assigned to ${project.name}.`,
+        details: {
+          client_id: client.id,
+          client_name: client.name,
+          manager_id: project.owner_id,
+        },
+      });
     }
 
     return client;
