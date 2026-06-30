@@ -139,14 +139,34 @@ console.log("TASK PROJECTID", task?.projectId);
     );
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!files.length) {
       toast.error("Drop at least one file before submitting");
       return;
     }
-    submitForReview(task.id, note, files.map((f) => f.name));
-    toast.success("Submitted for internal review");
-    navigate({ to: "/my-tasks" });
+
+    try {
+      const supabase = getSupabaseClient();
+
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          status: "review",
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", task.id);
+
+      if (error) throw error;
+
+      submitForReview(task.id, note, files.map((f) => f.name));
+
+      toast.success("Submitted for internal review");
+
+      navigate({ to: "/employee/tasks" });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to submit task");
+    }
   };
 
   return (

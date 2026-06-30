@@ -3,6 +3,7 @@ import {
   DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
+import { getSupabaseClient } from "@/repositories/supabase/client";
 import { TaskColumn, ColumnSkeleton } from "./TaskColumn";
 import { TaskCard } from "./TaskCard";
 import { useActiveTask, type TaskStore } from "@/hooks/useActiveTask";
@@ -13,6 +14,8 @@ import {
 interface Props {
   tasks: MyTask[];
   loading: boolean;
+  tasksState: MyTask[];
+  setTasks: React.Dispatch<React.SetStateAction<MyTask[]>>;
   onSubmit: (task: MyTask) => void;
   onOpenDetail: (task: MyTask) => void;
   /** Which board store to drive. Defaults to the shared employee store. */
@@ -21,7 +24,16 @@ interface Props {
   onOpenDeliverable?: (task: MyTask) => void;
 }
 
-export function TasksBoard({ tasks, loading, onSubmit, onOpenDetail, store = useActiveTask, onOpenDeliverable }: Props) {
+export function TasksBoard({
+  tasks,
+  loading,
+  tasksState,
+  setTasks,
+  onSubmit,
+  onOpenDetail,
+  store = useActiveTask,
+  onOpenDeliverable,
+}: Props) {
   const startTask = store((s) => s.startTask);
   const pauseTask = store((s) => s.pauseTask);
   const resumeRevision = store((s) => s.resumeRevision);
@@ -102,14 +114,150 @@ export function TasksBoard({ tasks, loading, onSubmit, onOpenDetail, store = use
                   key={t.id}
                   task={t}
                   shake={shakeId === t.id}
-                  onStart={() => {
-                    const r = startTask(t.id);
-                    if (r === "started") toast.success("Timer started");
+                  onStart={async () => {
+                    const supabase = getSupabaseClient();
+
+                    const { error } = await supabase
+                      .from("tasks")
+                      .update({
+                        status: "in_progress",
+                        started_at: new Date().toISOString(),
+                      })
+                      .eq("id", t.id);
+
+                    if (error) {
+                      console.error(error);
+                      return;
+                    }
+
+                    setTasks((prev) =>
+                      prev.map((t) =>
+                        t.id === t.id
+                          ? {
+                              ...t,
+                              lifecycle: "in_progress",
+                              runningSince: new Date().toISOString(),
+                            }
+                          : t
+                      )
+                    );
                   }}
-                  onPause={() => { pauseTask(t.id); toast("Task paused"); }}
-                  onSubmit={() => onSubmit(t)}
-                  onResume={() => { startTask(t.id); }}
-                  onResumeRevision={() => resumeRevision(t.id)}
+                  onPause={async () => {
+                    const supabase = getSupabaseClient();
+
+                    const { error } = await supabase
+                      .from("tasks")
+                      .update({
+                        status: "paused",
+                        started_at: null,
+                      })
+                      .eq("id", t.id);
+
+                    if (error) {
+                      console.error(error);
+                      return;
+                    }
+
+                    setTasks((prev) =>
+                      prev.map((t) =>
+                        t.id === t.id
+                          ? {
+                              ...t,
+                              lifecycle: "paused",
+                              runningSince: undefined,
+                            }
+                          : t
+                      )
+                    );
+                  }}
+                  onSubmit={async () => {
+                    const supabase = getSupabaseClient();
+
+                    const { error } = await supabase
+                      .from("tasks")
+                      .update({
+                        status: "review",
+                        completed_at: new Date().toISOString(),
+                      })
+                      .eq("id", t.id);
+
+                    if (error) {
+                      console.error(error);
+                      return;
+                    }
+
+                    setTasks((prev) =>
+                      prev.map((t) =>
+                        t.id === t.id
+                          ? {
+                               ...t,
+                              lifecycle: "review",
+                              submittedAt: new Date().toISOString(),
+                            }
+                          : t
+                      )
+                    );
+                  }}
+                  onResume={async () => {
+                    const supabase = getSupabaseClient();
+
+                    const now = new Date().toISOString();
+
+                    const { error } = await supabase
+                      .from("tasks")
+                      .update({
+                        status: "in_progress",
+                        started_at: now,
+                      })
+                      .eq("id", t.id);
+
+                    if (error) {
+                      console.error(error);
+                      return;
+                    }
+
+                    setTasks((prev) =>
+                      prev.map((t) =>
+                        t.id === t.id
+                          ? {
+                              ...t,
+                              lifecycle: "in_progress",
+                              runningSince: now,
+                            }
+                          : t
+                      )
+                    );
+                  }}
+                  onResumeRevision={async () => {
+                  const supabase = getSupabaseClient();
+
+                  const now = new Date().toISOString();
+
+                  const { error } = await supabase
+                    .from("tasks")
+                    .update({
+                      status: "in_progress",
+                      started_at: now,
+                    })
+                    .eq("id", t.id);
+
+                  if (error) {
+                    toast.error("Failed to resume task");
+                    return;
+                  }
+
+                  setTasks((prev) =>
+                    prev.map((task) =>
+                      task.id === t.id
+                        ? {
+                            ...task,
+                            lifecycle: "in_progress",
+                            runningSince: now,
+                          }
+                        : task
+                    )
+                  );
+                }}
                   onOpenDetail={() => onOpenDetail(t)}
                   onOpenDeliverable={onOpenDeliverable ? () => onOpenDeliverable(t) : undefined}
                 />
