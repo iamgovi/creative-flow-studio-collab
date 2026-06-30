@@ -270,14 +270,15 @@ if (employee) {
           <TasksBoard
             tasks={visible}
             loading={loading}
-            store={useActiveTask}
+            tasksState={tasks}
+            setTasks={setTasks}
             onSubmit={(t) => setSubmitTask(t)}
             onOpenDetail={(t) =>
-  navigate({
-    to: "/employee/tasks/$taskId",
-    params: { taskId: t.id },
-  })
-}
+            navigate({
+              to: "/employee/tasks/$taskId",
+              params: { taskId: t.id },
+            })
+          }
           />
         )}
       </div>
@@ -366,14 +367,14 @@ function SegmentedType({
 
 if (department === "Video Producer") {
   opts = [
-    { v: "video", label: "Shoot" },
+    { v: "shoot", label: "Shoot" },
     { v: "edit", label: "Edit" },
   ];
 }
 
 else if (department === "Content Writer") {
   opts = [
-    { v: "video", label: "Shoot" },
+    { v: "shoot", label: "Shoot" },
     { v: "edit", label: "Edit" },
     { v: "static", label: "Static" },
   ];
